@@ -62,7 +62,7 @@ void createImage(int* image, int width, int height, std::string imageName)
 	}
 
 	System::String^ imagePath =
-		marshal_as<System::String^>("..//Data//Output//Sequential//" + imageName);
+		marshal_as<System::String^>("..//Data//Output//MPI//" + imageName);
 	MyNewImage.Save(imagePath);
 	cout << "Image saved as " << imageName << endl;
 }
@@ -114,7 +114,7 @@ void equalizeHistogram(System::String^ imagePath, std::string imageName) {
 
 int main()
 {
-	cout << "This is the Sequential program."
+	cout << "This is the MPI program."
 		<< "\nEnsure all images are in the \"Data/Input\" directory"
 		<< "\nThen press enter to equalize their histograms...";
 	getchar();
