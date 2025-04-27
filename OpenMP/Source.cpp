@@ -86,7 +86,7 @@ void equalizeHistogram(System::String^ imagePath, std::string imageName) {
 #pragma omp for
 		for (int i = 0; i < 256; i++)
 			pixelCounts[i] = 0;
-#pragma omp for
+#pragma omp single
 		for (int i = 0; i < totalPixels; i++)
 			pixelCounts[imageData[i]]++;
 
