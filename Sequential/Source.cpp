@@ -1,11 +1,10 @@
 #include <iostream>
 #include <math.h>
 #include <stdlib.h>
-#include<string.h>
-#include<msclr\marshal_cppstd.h>
+#include <string.h>
+#include <msclr\marshal_cppstd.h>
 #include <ctime>
 #include <filesystem>
-#include <set>
 
 #using <mscorlib.dll>
 #using <System.dll>
@@ -64,51 +63,6 @@ void createImage(int* image, int width, int height, std::string imageName)
 	System::String^ imagePath =
 		marshal_as<System::String^>("..//Data//Output//Sequential//" + imageName);
 	MyNewImage.Save(imagePath);
-	cout << "Image saved as " << imageName << endl;
-}
-
-
-void equalizeHistogram(System::String^ imagePath, std::string imageName) {
-	int imageWidth, imageHeight;
-	int* imageData = inputImage(&imageWidth, &imageHeight, imagePath);
-	int* pixelCounts = new int[256];
-	int* intensityMapping = new int[256];
-
-	int start_s = clock();
-	// Start of measured region
-
-	int totalPixels = imageWidth * imageHeight;
-	int cumulativeSum = 0;
-
-	// Calculate the occurrence of each pixel value in the image
-	for (int i = 0; i < 256; i++)
-		pixelCounts[i] = 0;
-
-	for (int i = 0; i < totalPixels; i++)
-		pixelCounts[imageData[i]]++;
-
-
-	// Get the cumulative probabilities multiplied by 255 for each pixel value
-	for (int i = 0; i < 256; i++)
-	{
-		cumulativeSum += pixelCounts[i];
-		intensityMapping[i] = (double)cumulativeSum / totalPixels * 255;
-	}
-
-	// Get the new pixel value for each pixel in the image
-	for (int i = 0; i < totalPixels; i++)
-		imageData[i] = intensityMapping[imageData[i]];
-
-	// End of measured region
-	int stop_s = clock();
-
-	double timeTaken = (stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000;
-	cout << "\nTime taken to process image " << imageName << ": " << timeTaken << "ms" << endl;
-	createImage(imageData, imageWidth, imageHeight, imageName);
-
-	delete[] imageData;
-	delete[] pixelCounts;
-	delete[] intensityMapping;
 }
 
 
@@ -124,9 +78,49 @@ int main()
 		auto ext = entry.path().extension().string();
 		if ((ext != ".jpeg") && (ext != ".jpg") && (ext != ".png"))
 			continue;
-		System::String^ imagePath = marshal_as<System::String^>(entry.path().string());
+
 		std::string imageName = entry.path().filename().string();
-		equalizeHistogram(imagePath, imageName);
+		cout << "\nProcessing image " << imageName << endl;
+		System::String^ imagePath = marshal_as<System::String^>(entry.path().string());
+		int imageWidth, imageHeight;
+		int* imageData = inputImage(&imageWidth, &imageHeight, imagePath);
+		cout << "Read image " << imageName << endl;
+		int totalPixels = imageWidth * imageHeight;
+
+		int start_s = clock();
+		// Start of measured region
+
+
+		// Calculate the occurrence of each pixel value in the image
+		int* pixelCounts = new int[256] {0};
+		for (int i = 0; i < totalPixels; i++)
+			pixelCounts[imageData[i]]++;
+
+		// Get the cumulative probabilities multiplied by 255 for each pixel value
+		int cumulativeSum = 0;
+		int* intensityMapping = new int[256];
+		for (int i = 0; i < 256; i++)
+		{
+			cumulativeSum += pixelCounts[i];
+			intensityMapping[i] = (double)cumulativeSum / totalPixels * 255;
+		}
+
+		// Get the new pixel value for each pixel in the image
+		for (int i = 0; i < totalPixels; i++)
+			imageData[i] = intensityMapping[imageData[i]];
+
+
+		// End of measured region
+		int stop_s = clock();
+
+		double timeTaken = (stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000;
+		cout << "Time taken to process image " << imageName << ": " << timeTaken << "ms" << endl;
+		createImage(imageData, imageWidth, imageHeight, imageName);
+		cout << "Image saved as " << imageName << endl;
+
+		delete[] imageData;
+		delete[] pixelCounts;
+		delete[] intensityMapping;
 	}
 	return 0;
 }

@@ -1,11 +1,10 @@
 #include <iostream>
 #include <math.h>
 #include <stdlib.h>
-#include<string.h>
-#include<msclr\marshal_cppstd.h>
+#include <string.h>
+#include <msclr\marshal_cppstd.h>
 #include <ctime>
 #include <filesystem>
-#include <set>
 #include <mpi.h>
 
 #using <mscorlib.dll>
@@ -68,103 +67,16 @@ void createImage(int* image, int width, int height, std::string imageName)
 	System::String^ imagePath =
 		marshal_as<System::String^>(outputPath.string());
 	MyNewImage.Save(imagePath);
-	cout << "Image saved as " << imageName << endl;
-}
-
-
-void equalizeHistogram(System::String^ imagePath, std::string imageName) {
-	int isMPI;
-	MPI_Initialized(&isMPI);
-	if (isMPI == 0)
-		MPI_Init(NULL, NULL);
-
-	int rank, size;
-	MPI_Comm_size(MPI_COMM_WORLD, &size);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-	int* imageData = nullptr,
-		* intensityMapping = new int[256],
-		* pixelCountsUnsummed = nullptr,
-		* pixelCounts = nullptr,
-		totalPixels;
-
-	int imageWidth, imageHeight;
-	if (rank == 0)
-	{
-		imageData = inputImage(&imageWidth, &imageHeight, imagePath);
-		totalPixels = imageWidth * imageHeight;
-		pixelCountsUnsummed = new int[256 * size];
-	}
-
-	int start_s = clock();
-	// Start of measured region
-
-	MPI_Bcast(&totalPixels, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-	// Distribute the image data to all processes
-	int* localImageData = new int[totalPixels / size];
-	int* localPixelCounts = new int[256];
-	MPI_Scatter(imageData, totalPixels / size, MPI_INT, localImageData, totalPixels / size, MPI_INT, 0, MPI_COMM_WORLD);
-
-	// Calculate the occurrence of each pixel value in the image
-	for (int i = 0; i < 256; i++)
-		localPixelCounts[i] = 0;
-
-	for (int i = 0; i < totalPixels / size; i++)
-		localPixelCounts[localImageData[i]]++;
-
-
-	MPI_Gather(localPixelCounts, 256, MPI_INT, pixelCountsUnsummed, 256, MPI_INT, 0, MPI_COMM_WORLD);
-	// Get the cumulative probabilities multiplied by 255 for each pixel value
-	if (rank == 0)
-	{
-		pixelCounts = new int[256];
-		for (int i = 0; i < 256; i++)
-		{
-			pixelCounts[i] = 0;
-			for (int j = 0; j < size; j++)
-			{
-				pixelCounts[i] += pixelCountsUnsummed[i + j * 256];
-			}
-		}
-
-		int cumulativeSum = 0;
-		for (int i = 0; i < 256; i++)
-		{
-			cumulativeSum += pixelCounts[i];
-			intensityMapping[i] = (double)cumulativeSum / totalPixels * 255;
-		}
-	}
-
-	MPI_Bcast(intensityMapping, 256, MPI_INT, 0, MPI_COMM_WORLD);
-
-	// Get the new pixel value for each pixel in the image
-	for (int i = 0; i < totalPixels / size; i++)
-		localImageData[i] = intensityMapping[localImageData[i]];
-
-	MPI_Gather(localImageData, totalPixels / size, MPI_INT, imageData, totalPixels / size, MPI_INT, 0, MPI_COMM_WORLD);
-
-	// End of measured region
-	int stop_s = clock();
-
-	if (rank == 0)
-	{
-		double timeTaken = (stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000;
-		cout << "\nTime taken to process image " << imageName << ": " << timeTaken << "ms" << endl;
-		createImage(imageData, imageWidth, imageHeight, imageName);
-		delete[] imageData;
-		delete[] pixelCountsUnsummed;
-		delete[] pixelCounts;
-	}
-
-	delete[] localImageData;
-	delete[] localPixelCounts;
-	delete[] intensityMapping;
 }
 
 
 int main()
 {
+	MPI_Init(NULL, NULL);
+	int rank, size;
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
 	path inputPath = current_path().parent_path().parent_path() / "Data" / "Input";
 
 	for (const auto& entry : directory_iterator(inputPath))
@@ -172,9 +84,78 @@ int main()
 		auto ext = entry.path().extension().string();
 		if ((ext != ".jpeg") && (ext != ".jpg") && (ext != ".png"))
 			continue;
-		System::String^ imagePath = marshal_as<System::String^>(entry.path().string());
 		std::string imageName = entry.path().filename().string();
-		equalizeHistogram(imagePath, imageName);
+
+
+		int* intensityMapping = new int[256],
+			* imageData = nullptr,
+			* localPixelCounts = new int[256] {0},
+			* pixelCounts = nullptr;
+		int imageWidth, imageHeight, totalPixels;
+
+		if (rank == 0)
+		{
+			cout << "\nProcessing image " << imageName << endl;
+			System::String^ imagePath = marshal_as<System::String^>(entry.path().string());
+			imageData = inputImage(&imageWidth, &imageHeight, imagePath);
+			cout << "Read image " << imageName << endl;
+			totalPixels = imageWidth * imageHeight;
+			pixelCounts = new int[256];
+		}
+
+		int start_s = clock();
+		// Start of measured region
+
+
+		// Broadcast the total number of pixels to all processes
+		MPI_Bcast(&totalPixels, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+		// Distribute the image data to all processes
+		int* localImageData = new int[totalPixels / size];
+		MPI_Scatter(imageData, totalPixels / size, MPI_INT, localImageData, totalPixels / size, MPI_INT, 0, MPI_COMM_WORLD);
+
+		// Calculate the occurrence of each pixel value in the image
+		for (int i = 0; i < totalPixels / size; i++)
+			localPixelCounts[localImageData[i]]++;
+
+		MPI_Reduce(localPixelCounts, pixelCounts, 256, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+		// Get the cumulative probabilities multiplied by 255 for each pixel value
+		if (rank == 0)
+		{
+			int cumulativeSum = 0;
+			for (int i = 0; i < 256; i++)
+			{
+				cumulativeSum += pixelCounts[i];
+				intensityMapping[i] = (double)cumulativeSum / totalPixels * 255;
+			}
+		}
+		MPI_Bcast(intensityMapping, 256, MPI_INT, 0, MPI_COMM_WORLD);
+
+		// Get the new pixel value for each pixel in the image
+		for (int i = 0; i < totalPixels / size; i++)
+			localImageData[i] = intensityMapping[localImageData[i]];
+
+		MPI_Gather(localImageData, totalPixels / size, MPI_INT, imageData, totalPixels / size, MPI_INT, 0, MPI_COMM_WORLD);
+
+
+		// End of measured region
+		int stop_s = clock();
+
+		if (rank == 0)
+		{
+			double timeTaken = (stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000;
+			cout << "Time taken to process image " << imageName << ": " << timeTaken << "ms" << endl;
+			createImage(imageData, imageWidth, imageHeight, imageName);
+			cout << "Image saved as " << imageName << endl;
+
+			delete[] imageData;
+			delete[] pixelCounts;
+		}
+
+		delete[] localImageData;
+		delete[] localPixelCounts;
+		delete[] intensityMapping;
 	}
 
 	MPI_Finalize();
