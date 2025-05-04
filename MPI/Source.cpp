@@ -87,35 +87,35 @@ int main()
 		std::string imageName = entry.path().filename().string();
 
 
-		int* intensityMapping = new int[256],
-			* imageData = nullptr,
-			* localPixelCounts = new int[256] {0},
-			* pixelCounts = nullptr;
-		int imageWidth, imageHeight, totalPixels;
+		int imageWidth = 0, imageHeight = 0, totalPixels;
+		int* imageData = nullptr;
 
 		if (rank == 0)
 		{
 			cout << "\nProcessing image " << imageName << endl;
 			System::String^ imagePath = marshal_as<System::String^>(entry.path().string());
 			imageData = inputImage(&imageWidth, &imageHeight, imagePath);
-			cout << "Read image " << imageName << endl;
 			totalPixels = imageWidth * imageHeight;
-			pixelCounts = new int[256];
+			cout << "Read image " << imageName << endl;
 		}
 
 		int start_s = clock();
 		// Start of measured region
 
 
+		int intensityMapping[256], pixelCounts[256];
+
 		// Broadcast the total number of pixels to all processes
 		MPI_Bcast(&totalPixels, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 		// Distribute the image data to all processes
-		int* localImageData = new int[totalPixels / size];
-		MPI_Scatter(imageData, totalPixels / size, MPI_INT, localImageData, totalPixels / size, MPI_INT, 0, MPI_COMM_WORLD);
+		int chunkSize = totalPixels / size;
+		int* localImageData = new int[chunkSize];
+		MPI_Scatter(imageData, chunkSize, MPI_INT, localImageData, chunkSize, MPI_INT, 0, MPI_COMM_WORLD);
 
 		// Calculate the occurrence of each pixel value in the image
-		for (int i = 0; i < totalPixels / size; i++)
+		int localPixelCounts[256] = { 0 };
+		for (int i = 0; i < chunkSize; i++)
 			localPixelCounts[localImageData[i]]++;
 
 		MPI_Reduce(localPixelCounts, pixelCounts, 256, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -133,10 +133,10 @@ int main()
 		MPI_Bcast(intensityMapping, 256, MPI_INT, 0, MPI_COMM_WORLD);
 
 		// Get the new pixel value for each pixel in the image
-		for (int i = 0; i < totalPixels / size; i++)
+		for (int i = 0; i < chunkSize; i++)
 			localImageData[i] = intensityMapping[localImageData[i]];
 
-		MPI_Gather(localImageData, totalPixels / size, MPI_INT, imageData, totalPixels / size, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Gather(localImageData, chunkSize, MPI_INT, imageData, chunkSize, MPI_INT, 0, MPI_COMM_WORLD);
 
 
 		// End of measured region
@@ -150,14 +150,19 @@ int main()
 			cout << "Image saved as " << imageName << endl;
 
 			delete[] imageData;
-			delete[] pixelCounts;
 		}
-
 		delete[] localImageData;
-		delete[] localPixelCounts;
-		delete[] intensityMapping;
 	}
 
 	MPI_Finalize();
 	return 0;
 }
+
+/*
+Processing Times:
+- Clouds: 53ms
+- Desert: 21ms
+- Einstein: 12ms
+- Ocean: 73ms
+- Sparrows: 9ms
+*/

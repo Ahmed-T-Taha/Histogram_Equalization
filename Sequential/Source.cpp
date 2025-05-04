@@ -84,21 +84,21 @@ int main()
 		System::String^ imagePath = marshal_as<System::String^>(entry.path().string());
 		int imageWidth, imageHeight;
 		int* imageData = inputImage(&imageWidth, &imageHeight, imagePath);
-		cout << "Read image " << imageName << endl;
 		int totalPixels = imageWidth * imageHeight;
+		cout << "Read image " << imageName << endl;
 
 		int start_s = clock();
 		// Start of measured region
 
 
 		// Calculate the occurrence of each pixel value in the image
-		int* pixelCounts = new int[256] {0};
+		int pixelCounts[256] = { 0 };
 		for (int i = 0; i < totalPixels; i++)
 			pixelCounts[imageData[i]]++;
 
 		// Get the cumulative probabilities multiplied by 255 for each pixel value
 		int cumulativeSum = 0;
-		int* intensityMapping = new int[256];
+		int intensityMapping[256];
 		for (int i = 0; i < 256; i++)
 		{
 			cumulativeSum += pixelCounts[i];
@@ -119,8 +119,15 @@ int main()
 		cout << "Image saved as " << imageName << endl;
 
 		delete[] imageData;
-		delete[] pixelCounts;
-		delete[] intensityMapping;
 	}
 	return 0;
 }
+
+/*
+Processing Times:
+- Clouds: 75ms
+- Desert: 32ms
+- Einstein: 16ms
+- Ocean: 86ms
+- Sparrows: 11ms
+*/
