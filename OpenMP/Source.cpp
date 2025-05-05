@@ -19,6 +19,7 @@ using std::filesystem::directory_iterator;
 using System::Drawing::Color;
 using System::Drawing::Bitmap;
 
+#define nthreads 4
 
 // Read Image and save it to local arrays
 // Put the size of image in w & h
@@ -96,7 +97,7 @@ int main()
 		int intensityMapping[256];
 		int cumulativeSums[256];
 
-#pragma omp parallel
+#pragma omp parallel num_threads(nthreads)
 		{
 			// Calculate the occurrence of each pixel value in the image
 			int localPixelCounts[256] = { 0 };
@@ -143,9 +144,9 @@ int main()
 
 /*
 Processing Times:
-- Clouds: 70ms
-- Desert: 6ms
-- Einstein: 4ms
-- Ocean: 16ms
-- Sparrows: 3ms
+- Clouds: 55ms
+- Desert: 11ms
+- Einstein: 5ms
+- Ocean: 25ms
+- Sparrows: 5ms
 */
