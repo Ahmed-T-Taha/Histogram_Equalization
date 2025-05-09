@@ -77,7 +77,10 @@ int main()
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-	path inputPath = current_path().parent_path().parent_path() / "Data" / "Input";
+	path inputPath = current_path();
+	while (inputPath.filename().string() != "Histogram_Equalization")
+		inputPath = inputPath.parent_path();
+	inputPath = inputPath / "Data" / "Input";
 
 	for (const auto& entry : directory_iterator(inputPath))
 	{
@@ -157,12 +160,3 @@ int main()
 	MPI_Finalize();
 	return 0;
 }
-
-/*
-Processing Times:
-- Clouds: 53ms
-- Desert: 21ms
-- Einstein: 12ms
-- Ocean: 73ms
-- Sparrows: 9ms
-*/

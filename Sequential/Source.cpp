@@ -122,12 +122,3 @@ int main()
 	}
 	return 0;
 }
-
-/*
-Processing Times:
-- Clouds: 75ms
-- Desert: 32ms
-- Einstein: 16ms
-- Ocean: 86ms
-- Sparrows: 11ms
-*/
